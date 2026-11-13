@@ -1,6 +1,7 @@
 import uuid
 
 from fastapi import FastAPI
+from openinference.instrumentation import using_session
 from pydantic import BaseModel
 
 from agent.loop import run_agent
@@ -30,6 +31,7 @@ def chat(req: ChatRequest):
     conversation_id = req.conversation_id or str(uuid.uuid4())
     messages = CONVERSATIONS.get(conversation_id, [])
     messages.append({"role": "user", "content": req.message})
-    reply, messages = run_agent(messages)
+    with using_session(conversation_id):
+        reply, messages = run_agent(messages)
     CONVERSATIONS[conversation_id] = messages
     return ChatResponse(reply=reply, conversation_id=conversation_id)

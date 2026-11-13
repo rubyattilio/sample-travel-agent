@@ -1,3 +1,6 @@
+# Bump on every SYSTEM_PROMPT change; traces are tagged with it so evals can compare versions.
+PROMPT_VERSION = "v1"
+
 SYSTEM_PROMPT = """Help Book Travel.
 
 Guidelines:
