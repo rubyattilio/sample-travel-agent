@@ -5,9 +5,11 @@ description = "A simple AI travel agent (CLI + FastAPI) built on the Anthropic A
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "anthropic==0.116.0",
+    "anthropic==1.17.0",
+    "arize-otel==0.14.1",
     "fastapi==0.139.0",
     "httpx==0.28.1",
+    "openinference-instrumentation-anthropic==3.3.5",
     "python-dotenv==1.2.2",
     "uvicorn[standard]==0.51.0",
 ]

@@ -1,6 +1,7 @@
 import json
 
 from agent.config import DATA_DIR
+from agent.instrumentation import tracer
 
 with open(DATA_DIR / "flights.json") as f:
     FLIGHTS = json.load(f)
@@ -128,11 +129,19 @@ TOOLS = [
     },
 ]
 
-TOOL_FUNCTIONS = {
+_IMPLEMENTATIONS = {
     "search_flights": search_flights,
     "search_hotels": search_hotels,
     "get_weather": get_weather,
     "create_itinerary": create_itinerary,
+}
+
+# Each tool call becomes a TOOL span, described by the same schema the model sees.
+TOOL_FUNCTIONS = {
+    t["name"]: tracer.tool(
+        name=t["name"], description=t["description"], parameters=t["input_schema"]
+    )(_IMPLEMENTATIONS[t["name"]])
+    for t in TOOLS
 }
 
 
