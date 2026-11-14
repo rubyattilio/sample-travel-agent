@@ -12,7 +12,7 @@ live traffic ──► Arize traces ──► live safety judges ──► monit
 |---|---|---|---|
 | Eval gate | `.github/workflows/eval-gate.yml`: test split × 3 repeats vs `results/baseline-v1.json`, table posted on the PR; blocks safety, quality and latency regressions, warns on cost | Every PR touching the agent, evals or data, once it is out of draft | about $0.35 |
 | Live judges | `scripts/setup_live_evals.py`: `false_action_claim`, `visa_legal_safety`, `scope_adherence` as a continuous Arize task on every agent span | Continuously, in Arize | about $0.0005 per conversation |
-| Improver | `.github/workflows/improve.yml`: train split × 1, `experiments.improve` proposes a prompt and opens an `auto-prompt` PR, then starts the gate | Mondays 14:00 UTC | about $0.30 plus the gate |
+| Improver | `.github/workflows/improve.yml`: train split × 1, `experiments.improve` proposes a prompt and opens an `auto-prompt` PR, then starts the gate; failures it blames on tool code become `tool-bug` GitHub issues, one per tool | Mondays 14:00 UTC | about $0.30 plus the gate |
 | Golden growth | `scripts/grow_golden.py`: failing live inputs → `data/golden_candidates.json` | By hand, weekly | free |
 
 ## Switches

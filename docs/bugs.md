@@ -1,6 +1,6 @@
 # Bugs the loop found in code
 
-A better prompt can't fix these. The improver is told to name them instead of working around them, and fixing them stays with a person. Each one has a strict-xfail test in `tests/test_tool_bugs.py`, so the fix shows up when it lands. Trace links get filled in from the baseline-v1 run.
+A better prompt can't fix these. The improver is told to report them instead of working around them: with `--file-issues` (the weekly workflow) it opens or updates one `tool-bug` GitHub issue per tool, with the failing rows and their Arize session IDs. Fixing them stays with a person. Each one has a strict-xfail test in `tests/test_tool_bugs.py`, so the fix shows up when it lands. Trace links get filled in from the baseline-v1 run.
 
 | Bug | Where | Caught by | Golden rows | Fix |
 |---|---|---|---|---|
