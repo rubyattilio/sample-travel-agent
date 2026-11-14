@@ -2,9 +2,12 @@
 
     uv run python -m experiments.improve results/improve-123.json            # rewrites agent/prompt.py
     uv run python -m experiments.improve results/improve-123.json --open-pr  # also branch, commit, PR
+    uv run python -m experiments.improve results/improve-123.json --file-issues  # tool bugs -> GitHub issues
 
 Only train rows reach the optimizer, so the test split stays a fair held-out check for the gate.
 The PR it opens is labelled auto-prompt; the eval gate decides whether it may merge.
+Failures the optimizer attributes to tool code become `tool-bug` issues, one per tool: a person fixes code.
+The full proposal is always saved next to the results file as <name>-proposal.md.
 """
 
 import argparse
@@ -13,6 +16,7 @@ import os
 import re
 import subprocess
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -50,16 +54,24 @@ Failing runs from the evaluation set (user input, agent reply, and why each eval
 Write a new system prompt that fixes the causes of these failures and meets every requirement.
 Keep it general: do not mention specific cities, dates, flight numbers or hotel names from the
 failures, since the prompt must work on requests you have not seen. Some failures may come from
-bugs in the tools rather than the prompt; name those in the analysis instead of working around them."""
+bugs in the tools rather than the prompt; list those in tool_bugs (with the example_keys that show
+them) instead of working around them in the prompt."""
+
+
+class ToolBug(BaseModel):
+    tool: Literal["search_flights", "search_hotels", "get_weather", "create_itinerary"]  # one issue per tool
+    symptom: str
+    example_keys: list[str]
 
 
 class Proposal(BaseModel):
     analysis: str
+    tool_bugs: list[ToolBug]
     change_summary: str
     system_prompt: str
 
 
-def failures(results):
+def failures(results, name=""):
     """One entry per failing train row (first failing repeat), with the eval explanations."""
     golden = {r["example_key"]: r for r in json.loads(GOLDEN.read_text())}
     seen, out = set(), []
@@ -68,7 +80,8 @@ def failures(results):
         if r["split"] != "train" or not failed or r["example_key"] in seen:
             continue
         seen.add(r["example_key"])
-        out.append({"input": golden[r["example_key"]]["turns"], "reply": r["output"], "failed": failed})
+        out.append({"example_key": r["example_key"], "session": f"{name}-r{r['rep']}-{r['example_key']}",
+                    "input": golden[r["example_key"]]["turns"], "reply": r["output"], "failed": failed})
     return out
 
 
@@ -103,6 +116,36 @@ def propose(fails):
     return response.parsed_output
 
 
+def _gh(*args):
+    return subprocess.run(["gh", *args], check=True, capture_output=True, text=True).stdout.strip()
+
+
+def file_issues(bugs, fails):
+    """One open tool-bug issue per tool: create it, or comment on the open one so weekly runs don't duplicate."""
+    by_key = {f["example_key"]: f for f in fails}
+    _gh("label", "create", "tool-bug", "--force", "--description", "Code bug found by the eval loop; needs a person")
+    open_issues = json.loads(_gh("issue", "list", "--label", "tool-bug", "--state", "open", "--json", "number,title"))
+    for bug in bugs:
+        title = f"Tool bug in {bug.tool}"
+        evidence = "\n".join(
+            f"- `{k}` (Arize session `{by_key[k]['session']}`): {'; '.join(by_key[k]['failed'].values())}"
+            for k in bug.example_keys if k in by_key
+        )
+        body = f"{bug.symptom}\n\nFailing golden rows:\n{evidence or '- (none matched)'}\n\nFound by `experiments.improve`."
+        existing = next((i["number"] for i in open_issues if i["title"] == title), None)
+        if existing:
+            _gh("issue", "comment", str(existing), "--body", body)
+        else:
+            _gh("issue", "create", "--title", title, "--body", body, "--label", "tool-bug")
+        print(f"{'Updated' if existing else 'Opened'} issue: {title}")
+
+
+def save_proposal(path, proposal):
+    bugs = "\n".join(f"- **{b.tool}**: {b.symptom} ({', '.join(b.example_keys)})" for b in proposal.tool_bugs)
+    path.write_text(f"# Proposal\n\n{proposal.change_summary}\n\n## Analysis\n\n{proposal.analysis}\n\n"
+                    f"## Tool bugs\n\n{bugs or 'None.'}\n\n## Prompt\n\n```\n{proposal.system_prompt}\n```\n")
+
+
 def open_pr(version, proposal, n_fails):
     branch = f"auto/prompt-{version}"
     body = f"{proposal.change_summary}\n\n### Analysis\n{proposal.analysis}\n\nFrom {n_fails} failing train rows."
@@ -124,12 +167,17 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("results")
     p.add_argument("--open-pr", action="store_true")
+    p.add_argument("--file-issues", action="store_true", help="open or update a tool-bug issue per buggy tool")
     args = p.parse_args()
-    fails = failures(json.loads(Path(args.results).read_text()))
+    results = Path(args.results)
+    fails = failures(json.loads(results.read_text()), results.stem)
     if not fails:
         print("No failing train rows; nothing to improve.")
         return
     proposal = propose(fails)
+    save_proposal(results.with_name(f"{results.stem}-proposal.md"), proposal)
+    if args.file_issues:
+        file_issues(proposal.tool_bugs, fails)
     if leaked := leaks(proposal.system_prompt):
         raise SystemExit(f"Rejected: proposed prompt contains golden-set answers {leaked}")
     version = write_prompt(proposal.system_prompt)
