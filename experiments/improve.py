@@ -16,6 +16,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
+import agent.config  # noqa: F401  loads ANTHROPIC_API_KEY from .env
 from evals.extract import CATALOG_HOTELS, flight_numbers
 
 ROOT = Path(__file__).resolve().parent.parent
