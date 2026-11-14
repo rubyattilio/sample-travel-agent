@@ -1,0 +1,62 @@
+# Runs the held-out test split (15 rows x 3 repeats, about $0.35) on PRs that are ready for review,
+# compares it to results/baseline-v1.json, comments the table on the PR and fails on a regression.
+# Draft PRs are skipped so work in progress costs nothing.
+name: eval-gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths: ["agent/**", "evals/**", "data/**", "experiments/**", "pyproject.toml", "uv.lock"]
+  workflow_dispatch:  # experiments.improve starts it this way, since its PRs can't trigger pull_request
+    inputs:
+      pr:
+        description: PR number to gate
+        required: true
+
+concurrency:
+  group: eval-gate-${{ github.event.pull_request.number || inputs.pr }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  gate:
+    if: github.event_name == 'workflow_dispatch' || !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    env:
+      PR: ${{ github.event.pull_request.number || inputs.pr }}
+      NAME: pr-${{ github.event.pull_request.number || inputs.pr }}-${{ github.run_id }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      ARIZE_API_KEY: ${{ secrets.ARIZE_API_KEY }}
+      ARIZE_SPACE_ID: ${{ secrets.ARIZE_SPACE_ID }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync
+      - run: uv run pytest -q
+      # shortcut: --no-upload because the ax CLI isn't set up in CI; traces still reach Arize. Add an ax profile to log experiments too.
+      - run: uv run python -m experiments.run --name "$NAME" --split test --reps 3 --no-upload
+      - id: gate
+        run: uv run python -m experiments.gate "results/$NAME.json" --report gate.md
+      - if: always() && hashFiles('gate.md') != ''
+        run: gh pr comment "$PR" --body-file gate.md --edit-last --create-if-none
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.NAME }}
+          path: results/${{ env.NAME }}.*
+
+      # Auto-merge (stage C). Off unless the repo variable AUTO_MERGE_ENABLED is "true": that is the kill switch.
+      - name: Auto-merge prompt-only PRs that clear the strict bar
+        if: steps.gate.outcome == 'success' && vars.AUTO_MERGE_ENABLED == 'true'
+        run: |
+          gh pr view "$PR" --json labels --jq '.labels[].name' | grep -qx auto-prompt || { echo "Not an auto-prompt PR"; exit 0; }
+          [ "$(gh pr diff "$PR" --name-only)" = "agent/prompt.py" ] || { echo "Touches more than agent/prompt.py"; exit 0; }
+          uv run python -m experiments.gate "results/$NAME.json" --strict > /dev/null || { echo "Below the strict bar"; exit 0; }
+          since=$(date -u -d '1 day ago' +%Y-%m-%d)
+          [ "$(gh pr list --label auto-prompt --state merged --search "merged:>=$since" --json number --jq length)" = 0 ] \
+            || { echo "Rate limit: one auto-merge per day"; exit 0; }
+          gh pr merge "$PR" --squash

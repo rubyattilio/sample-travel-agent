@@ -1,0 +1,33 @@
+# Weekly: run the train split, ask the optimizer for a better prompt, open an auto-prompt PR and gate it.
+# Off unless the repo variable AUTO_IMPROVE_ENABLED is "true". About $0.30 per run.
+name: improve
+
+on:
+  schedule:
+    - cron: "0 14 * * 1"  # Mondays 14:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  improve:
+    if: vars.AUTO_IMPROVE_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    env:
+      NAME: improve-${{ github.run_id }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      ARIZE_API_KEY: ${{ secrets.ARIZE_API_KEY }}
+      ARIZE_SPACE_ID: ${{ secrets.ARIZE_SPACE_ID }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync
+      - run: uv run python -m experiments.run --name "$NAME" --split train --reps 1 --no-upload
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          uv run python -m experiments.improve "results/$NAME.json" --open-pr
