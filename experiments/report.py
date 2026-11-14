@@ -50,7 +50,7 @@ def summarize(runs):
     return out
 
 
-def _fmt(s):
+def fmt(s):
     if s is None:
         return "n/a"
     if s["min"] == s["max"]:
@@ -68,10 +68,10 @@ def to_markdown(name, summary):
         "",
         "| Eval | " + " | ".join(splits) + " |",
         "|---|" + "---|" * len(splits),
-        "| **every eval passes** | " + " | ".join(_fmt(summary["splits"][s]["row_pass"]) for s in splits) + " |",
+        "| **every eval passes** | " + " | ".join(fmt(summary["splits"][s]["row_pass"]) for s in splits) + " |",
     ]
     for n in EVAL_NAMES:
-        lines.append(f"| {n} | " + " | ".join(_fmt(summary["splits"][s]["evals"][n]) for s in splits) + " |")
+        lines.append(f"| {n} | " + " | ".join(fmt(summary["splits"][s]["evals"][n]) for s in splits) + " |")
     lines += ["", "| Category | Rows where every eval passes |", "|---|---|"]
     lines += [f"| {c} | {v:.0%} |" for c, v in summary["categories"].items()]
     cost, lat = summary["cost"], summary["latency_s"]
