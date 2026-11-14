@@ -128,6 +128,17 @@ uv run python scripts/generate_traffic.py http://localhost:9000
 TRAVEL_AGENT_URL=http://localhost:9000 uv run python scripts/generate_traffic.py
 ```
 
+### Experiments
+
+Run the golden set (`data/golden_v1.json`) through the agent, score every run with the evals in `evals/`, and log one Arize experiment per repeat:
+
+```bash
+uv run python -m experiments.run --name baseline-v1 --reps 3                      # about $1
+uv run python -m experiments.run --name debug --limit 3 --reps 1 --no-upload      # a few cents
+```
+
+Results land in `results/<name>.json` and `results/<name>.md`. Upload uses the `ax` CLI.
+
 ## Notes
 
 - Flight, hotel, and weather data are static fixtures — edit the files in `data/` to change what the agent can find.
