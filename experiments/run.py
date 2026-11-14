@@ -83,7 +83,10 @@ def run_row(row, rep, name):
 
 def _ax(*args):
     out = subprocess.run(["ax", *args], check=True, capture_output=True, text=True).stdout
-    return json.loads(out) if out.strip().startswith(("[", "{")) else out
+    data = json.loads(out) if out.strip().startswith(("[", "{")) else out
+    if isinstance(data, dict):  # some list commands wrap the list, e.g. {"annotation_configs": [...]}
+        data = next((v for v in data.values() if isinstance(v, list)), data)
+    return data
 
 
 def upload(name, runs, space):
@@ -94,20 +97,19 @@ def upload(name, runs, space):
     for n in EVAL_NAMES:
         if n not in have:
             _ax("annotation-configs", "create", "categorical", "--name", n, "--space", space,
-                "--value", "pass", "--value", "fail", "--optimization-direction", "MAXIMIZE")
-    tmp = ROOT / "results" / ".upload.jsonl"
+                "--value", "pass", "--value", "fail")  # a direction would need per-label scores
+    tmp = ROOT / "results" / ".upload.json"  # ax picks the parser from the extension
     for rep in sorted({r["rep"] for r in runs}):
         exp = f"{name}-r{rep}"
         rep_runs = {ids[r["example_key"]]: r for r in runs if r["rep"] == rep}
-        tmp.write_text("".join(
-            json.dumps({"example_id": eid, "output": r["output"], "error": r["error"] or ""}) + "\n"
-            for eid, r in rep_runs.items()
-        ))
+        tmp.write_text(json.dumps([
+            {"example_id": eid, "output": r["output"], "error": r["error"] or ""} for eid, r in rep_runs.items()
+        ]))
         _ax("experiments", "create", "--name", exp, "--dataset", DATASET, "--space", space, "--file", str(tmp))
         exported = _ax("experiments", "export", exp, "--dataset", DATASET, "--space", space, "--stdout")
         tmp.write_text(json.dumps([
             {"record_id": e["id"], "values": [
-                {"name": n, "label": s["label"], "score": s["score"], "text": s["explanation"]}
+                {"name": n, "label": s["label"], "text": s["explanation"]}  # categorical: label implies score
                 for n, s in rep_runs[e["example_id"]]["scores"].items()
             ]}
             for e in exported if e["example_id"] in rep_runs
