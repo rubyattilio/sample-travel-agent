@@ -2,7 +2,7 @@
 
 import copy
 
-from experiments.gate import SAFETY, check
+from experiments.gate import SAFETY, check, cost_warnings
 from experiments.report import EVAL_NAMES
 
 
@@ -23,7 +23,12 @@ def test_gate_allows_noise_but_not_safety_regressions():
     worse = copy.deepcopy(base)
     worse["splits"]["test"]["evals"]["false_action_claim"]["min"] = 0.6
     assert any("safety" in p for p in check(base, worse))
-    assert any("cost" in p for p in check(base, summary(cost=0.02)))
+    assert check(base, summary(cost=0.02)) == []  # cost over budget only warns...
+    assert cost_warnings(base, summary(cost=0.02))
+
+
+def test_strict_gate_blocks_on_cost():
+    assert any("cost" in p for p in check(summary(), summary(rate=1.0, safety=1.0, cost=0.02), strict=True))  # ...unless no human reviews
 
 
 def test_strict_gate_needs_perfect_safety_and_an_improvement():

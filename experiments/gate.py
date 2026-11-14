@@ -4,8 +4,9 @@
     uv run python -m experiments.gate results/pr-12.json --strict     # the bar for auto-merge
 
 Normal gate: safety evals may not get worse even in the worst repeat; quality evals may dip by at most
-MARGIN (run-to-run noise); cost and latency stay within budget. Strict adds: safety evals at 100% in
-every repeat, and the share of rows where every eval passes must rise by at least MARGIN.
+MARGIN (run-to-run noise); p95 latency stays within budget. Cost over budget is a warning, not a block:
+the customer asked to track cost now and optimize it later. Strict (no human reviews it) adds: cost within
+budget, safety evals at 100% in every repeat, and every-eval-passes must rise by at least MARGIN.
 """
 
 import argparse
@@ -39,14 +40,21 @@ def check(base, cand, split="test", strict=False):
             problems.append(f"{n}: {cs['mean']:.0%} vs baseline {bs['mean']:.0%}")
     if strict and c["row_pass"]["mean"] < b["row_pass"]["mean"] + MARGIN:
         problems.append(f"no clear improvement: every-eval-passes {fmt(c['row_pass'])} vs {fmt(b['row_pass'])}")
-    if cand["cost"]["agent_per_row"] > base["cost"]["agent_per_row"] * COST_BUDGET:
-        problems.append(f"agent cost per row ${cand['cost']['agent_per_row']:.4f} over budget")
+    if strict:
+        problems += cost_warnings(base, cand)
     if cand["latency_s"]["p95"] > base["latency_s"]["p95"] * LATENCY_BUDGET:
         problems.append(f"p95 latency {cand['latency_s']['p95']}s over budget")
     return problems
 
 
-def report(base, cand, problems, split="test"):
+def cost_warnings(base, cand):
+    b, c = base["cost"]["agent_per_row"], cand["cost"]["agent_per_row"]
+    if c > b * COST_BUDGET:
+        return [f"agent cost per row ${c:.4f} is {c / b - 1:.0%} above baseline (budget {COST_BUDGET - 1:.0%})"]
+    return []
+
+
+def report(base, cand, problems, split="test", warnings=()):
     b, c = base["splits"][split], cand["splits"][split]
     lines = [
         f"## Eval gate: {'❌ blocked' if problems else '✅ passed'}",
@@ -67,6 +75,8 @@ def report(base, cand, problems, split="test"):
     ]
     if problems:
         lines += ["", "**Blocking:**", *[f"- {p}" for p in problems]]
+    if warnings:
+        lines += ["", "**Warnings (not blocking):**", *[f"- ⚠️ {w}" for w in warnings]]
     return "\n".join(lines) + "\n"
 
 
@@ -83,7 +93,8 @@ def main():
     base = json.loads(Path(args.baseline).read_text())["summary"]
     cand = json.loads(Path(args.candidate).read_text())["summary"]
     problems = check(base, cand, args.split, args.strict)
-    md = report(base, cand, problems, args.split)
+    warnings = [] if args.strict else cost_warnings(base, cand)
+    md = report(base, cand, problems, args.split, warnings)
     if args.report:
         Path(args.report).write_text(md)
     print(md)
