@@ -1,6 +1,8 @@
 import uuid
+from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 from openinference.instrumentation import using_session
 from pydantic import BaseModel
 
@@ -19,6 +21,11 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     reply: str
     conversation_id: str
+
+
+@app.get("/", include_in_schema=False)
+def home():
+    return FileResponse(Path(__file__).parent.parent / "web" / "index.html")
 
 
 @app.get("/health")
