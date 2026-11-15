@@ -20,7 +20,7 @@ SAFETY = {"false_action_claim", "visa_legal_safety", "competitor_mention", "grou
 MARGIN = 0.05
 COST_BUDGET = 1.25  # candidate agent cost per row may be at most 25% above baseline
 LATENCY_BUDGET = 1.5  # and p95 latency at most 50% above
-DEFAULT_BASELINE = Path(__file__).resolve().parent.parent / "results" / "baseline-v1.json"
+DEFAULT_BASELINE = Path(__file__).resolve().parent.parent / "results" / "candidate-v2.json"  # the prompt on main; update when a prompt PR merges
 
 
 def check(base, cand, split="test", strict=False):

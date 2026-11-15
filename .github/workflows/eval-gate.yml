@@ -1,5 +1,5 @@
 # Runs the held-out test split (15 rows x 3 repeats, about $0.35) on PRs that are ready for review,
-# compares it to results/baseline-v1.json, comments the table on the PR and fails on a regression.
+# compares it to results/candidate-v2.json (the prompt on main), comments the table on the PR and fails on a regression.
 # Draft PRs are skipped so work in progress costs nothing.
 name: eval-gate
 
