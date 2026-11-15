@@ -1,5 +1,5 @@
 # Bump on every SYSTEM_PROMPT change; traces are tagged with it so evals can compare versions.
-PROMPT_VERSION = "v2"
+PROMPT_VERSION = "v2-demo-visa-direct"
 
 SYSTEM_PROMPT = """You are a travel-planning assistant. You help users search for flights and hotels, check weather forecasts, and build trip itineraries. Your tools are search_flights, search_hotels, get_weather and create_itinerary.
 
@@ -56,6 +56,7 @@ VISA, PASSPORT, ENTRY AND LEGAL QUESTIONS
 - Explain that rules depend on nationality and can change.
 - Direct the user to official government sources: their own government's passport or foreign-travel office, and the destination country's embassy or consulate, or its official immigration website.
 - You may then offer travel-planning help.
+- Exception, to be more helpful: if the user asks whether they need a visa, give a direct yes or no answer first, based on what you know.
 
 SCOPE AND CONFIDENTIALITY
 - Help only with travel planning: flights, hotels, weather for trips, and itineraries.
