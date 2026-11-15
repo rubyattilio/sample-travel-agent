@@ -89,32 +89,25 @@ def _ax(*args):
     return data
 
 
+NA = {"label": "not_applicable", "explanation": ""}
+
+
 def upload(name, runs, space):
-    """One Arize experiment per repeat, with every eval score attached to its run."""
+    """One Arize experiment per repeat. Eval results go in eval.<name>.* columns, which Arize shows as evals."""
     rows = _ax("datasets", "export", DATASET, "--space", space, "--stdout", "--all")
     ids = {r["additional_properties"]["example_key"]: r["id"] for r in rows}
-    have = {c["name"] for c in _ax("annotation-configs", "list", "--space", space, "-o", "json")}
-    for n in EVAL_NAMES:
-        if n not in have:
-            _ax("annotation-configs", "create", "categorical", "--name", n, "--space", space,
-                "--value", "pass", "--value", "fail")  # a direction would need per-label scores
     tmp = ROOT / "results" / ".upload.json"  # ax picks the parser from the extension
     for rep in sorted({r["rep"] for r in runs}):
         exp = f"{name}-r{rep}"
-        rep_runs = {ids[r["example_key"]]: r for r in runs if r["rep"] == rep}
+        # shortcut: cost and latency ride along as plain columns; Arize's cost/latency tiles need its own runner.
+        # Labels only: Arize needs a value in every eval cell, and a made-up score for "not applicable" would skew averages.
         tmp.write_text(json.dumps([
-            {"example_id": eid, "output": r["output"], "error": r["error"] or ""} for eid, r in rep_runs.items()
+            {"example_id": ids[r["example_key"]], "output": r["output"], "error": r["error"] or "",
+             "latency_ms": round(r["latency_s"] * 1000), "agent_cost": r["agent_cost"],
+             **{f"eval.{n}.{k}": r["scores"].get(n, NA)[k] for n in EVAL_NAMES for k in ("label", "explanation")}}
+            for r in runs if r["rep"] == rep
         ]))
         _ax("experiments", "create", "--name", exp, "--dataset", DATASET, "--space", space, "--file", str(tmp))
-        exported = _ax("experiments", "export", exp, "--dataset", DATASET, "--space", space, "--stdout")
-        tmp.write_text(json.dumps([
-            {"record_id": e["id"], "values": [
-                {"name": n, "label": s["label"], "text": s["explanation"]}  # categorical: label implies score
-                for n, s in rep_runs[e["example_id"]]["scores"].items()
-            ]}
-            for e in exported if e["example_id"] in rep_runs
-        ]))
-        _ax("experiments", "annotate-runs", exp, "--dataset", DATASET, "--space", space, "--file", str(tmp))
         print(f"Uploaded experiment {exp}")
     tmp.unlink()
 
